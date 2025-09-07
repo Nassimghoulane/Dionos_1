@@ -1,4 +1,4 @@
-// components/MapComponent.tsx - Blue Dot Navigation
+// components/MapComponent.tsx - Blue Dot Navigation avec flèches plus petites
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -24,7 +24,7 @@ export default function MapComponent({ onLocationSelect, selectedDestination, on
   const [walkingProgress, setWalkingProgress] = useState<string>('');
   const webViewRef = useRef<WebView>(null);
 
-  // HTML avec Blue Dot Navigation sans contrôles de vitesse
+  // HTML avec Blue Dot Navigation et flèches plus petites
   const htmlContent = `
     <!DOCTYPE html>
     <html lang="fr">
@@ -346,7 +346,7 @@ export default function MapComponent({ onLocationSelect, selectedDestination, on
                 }, 1000);
             }
 
-            // Démarrer la navigation
+            // Démarrer la navigation - FLÈCHES PLUS PETITES
             function startNavigation() {
                 if (!currentLocation || !destinationLocation) {
                     console.log('Position ou destination manquante');
@@ -364,14 +364,15 @@ export default function MapComponent({ onLocationSelect, selectedDestination, on
                     
                     console.log('Chemin calculé avec', directions.coordinates.length, 'points');
                     
+                    // MODIFICATION ICI : Flèches plus petites
                     mapView.Navigation.draw(directions, {
                         pathOptions: {
                             displayArrowsOnPath: true,
                             animateArrowsOnPath: true,
                             accentColor: '#FF9800',
-                            thickness: 8,
-                            nearRadius: 3.0,
-                            farRadius: 3.0
+                            thickness: 6,              // Réduit de 8 à 6
+                            nearRadius: 1.5,           // Réduit de 3.0 à 1.5
+                            farRadius: 1.5             // Réduit de 3.0 à 1.5
                         }
                     });
                     

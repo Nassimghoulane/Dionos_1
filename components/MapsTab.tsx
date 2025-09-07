@@ -1,497 +1,1010 @@
-// components/MapsTab.tsx - Onglet dédié à la navigation
-import React, { useState } from 'react';
+// components/MapsTab.tsx - Interface pour carte persistante - VERSION FINALE
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Modal,
   FlatList,
-  TextInput,
-  SafeAreaView,
+  Animated,
+  Dimensions,
 } from 'react-native';
-import MapComponent from './MapComponent';
 
 interface MappedInLocation {
   id: string;
   name: string;
   type: string;
   description?: string;
+  level?: string;
+  rating?: number;
+  distance?: string;
+  walkingTime?: string;
+  services?: string[];
+  isOpen?: boolean;
+  openingHours?: string;
+  crowdLevel?: 'Faible' | 'Modéré' | 'Élevé';
 }
 
-interface NavigationStep {
-  instruction: string;
-  distance: number;
-  direction: string;
-  completed: boolean;
+interface MapState {
+  selectedDestination: string;
+  currentPosition: string;
+  onLocationSelect: (locationName: string) => void;
+  onMapMessage: (message: any) => void;
 }
 
 interface MapsTabProps {
   onNavigateToStore: (storeId?: string) => void;
+  mapState: MapState;
+  onDestinationChange: (destination: string) => void;
+  onPositionChange: (position: string) => void;
+  mapLocations?: any[];
 }
 
-export default function MapsTab({ onNavigateToStore }: MapsTabProps) {
-  // États de navigation
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentPosition, setCurrentPosition] = useState<string>('');
-  const [availableLocations, setAvailableLocations] = useState<MappedInLocation[]>([]);
-  const [isLoadingLocations, setIsLoadingLocations] = useState(true);
+export default function MapsTab({ 
+  onNavigateToStore, 
+  mapState, 
+  onDestinationChange, 
+  onPositionChange,
+  mapLocations = []
+}: MapsTabProps) {
+  const { height: screenHeight } = Dimensions.get('window');
   
-  // États de navigation guidée
-  const [isNavigating, setIsNavigating] = useState(false);
-  const [navigationSteps, setNavigationSteps] = useState<NavigationStep[]>([]);
-  const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [totalDistance, setTotalDistance] = useState<string>('');
-  const [showNavigationPanel, setShowNavigationPanel] = useState(false);
+  const slideAnim = useRef(new Animated.Value(screenHeight)).current;
+  const infoSlideAnim = useRef(new Animated.Value(screenHeight)).current;
+  
+  const [showDestinations, setShowDestinations] = useState(false);
+  const [showLocationInfo, setShowLocationInfo] = useState(false);
+  const [selectedLocationInfo, setSelectedLocationInfo] = useState<MappedInLocation | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [availableLocations, setAvailableLocations] = useState<MappedInLocation[]>([]);
+
+  useEffect(() => {
+    if (mapLocations && mapLocations.length > 0) {
+      const mappedLocations: MappedInLocation[] = mapLocations.map((loc: any) => ({
+        id: loc.id,
+        name: loc.name,
+        type: getLocationTypeFromName(loc.name),
+        description: generateDescription(loc.name, loc.type),
+        level: 'Niveau 0',
+        rating: 4.0 + Math.random() * 1.0,
+        distance: `${50 + Math.floor(Math.random() * 200)}m`,
+        walkingTime: `${1 + Math.floor(Math.random() * 5)} min`,
+        services: generateServices(loc.name),
+        isOpen: Math.random() > 0.2,
+        openingHours: generateOpeningHours(loc.name),
+        crowdLevel: ['Faible', 'Modéré', 'Élevé'][Math.floor(Math.random() * 3)] as 'Faible' | 'Modéré' | 'Élevé'
+      }));
+      
+      setAvailableLocations(mappedLocations);
+    }
+  }, [mapLocations]);
+
+  const getLocationTypeFromName = (name: string): string => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('food') || lowerName.includes('restaurant')) return 'Restaurant';
+    if (lowerName.includes('store') || lowerName.includes('shop')) return 'Shop';
+    if (lowerName.includes('washroom') || lowerName.includes('toilet')) return 'Facilities';
+    if (lowerName.includes('office')) return 'Services';
+    if (lowerName.includes('grocery')) return 'Grocery';
+    return 'Other';
+  };
+
+  const generateDescription = (name: string, type: string): string => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('food') || lowerName.includes('restaurant')) {
+      return 'Restaurant avec une variété de plats délicieux. Service rapide et ambiance conviviale.';
+    }
+    if (lowerName.includes('store')) {
+      return 'Magasin proposant une sélection d\'articles de qualité. Personnel accueillant et prix compétitifs.';
+    }
+    if (lowerName.includes('washroom')) {
+      return 'Sanitaires propres et modernes avec accès PMR. Nettoyage régulier toutes les heures.';
+    }
+    if (lowerName.includes('grocery')) {
+      return 'Épicerie avec produits frais et articles de première nécessité. Ouvert tous les jours.';
+    }
+    return `${name} - Un lieu pratique et accessible pour vos besoins.`;
+  };
+
+  const generateServices = (name: string): string[] => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('food') || lowerName.includes('restaurant')) {
+      return ['Plats chauds', 'Boissons', 'Service rapide', 'Paiement carte'];
+    }
+    if (lowerName.includes('store')) {
+      return ['Articles variés', 'Paiement carte', 'Conseils client', 'Échange/retour'];
+    }
+    if (lowerName.includes('washroom')) {
+      return ['Accès PMR', 'Nettoyage régulier', 'Lave-mains automatique', 'Sèche-mains'];
+    }
+    if (lowerName.includes('grocery')) {
+      return ['Produits frais', 'Épicerie fine', 'Paiement sans contact', 'Sacs réutilisables'];
+    }
+    return ['Service client', 'Accès facile'];
+  };
+
+  const generateOpeningHours = (name: string): string => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('washroom')) return '24h/24';
+    if (lowerName.includes('office')) return '09h00 - 17h00';
+    return '10h00 - 22h00';
+  };
 
   const filteredLocations = availableLocations.filter(location =>
     location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (location.description && location.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const handleLocationSelect = (locationName: string) => {
-    setCurrentPosition(locationName);
+  const handleDestinationSelect = (location: MappedInLocation) => {
+    onDestinationChange(location.name);
+    setShowDestinations(false);
+    setSearchQuery('');
+    hideDestinations();
   };
 
-  const handleDestinationSelect = (location: MappedInLocation) => {
-    setSelectedLocation(location.name);
-    setShowLocationPicker(false);
-    setSearchQuery('');
+  const handleLocationInfoPress = (location: MappedInLocation) => {
+    setSelectedLocationInfo(location);
+    showLocationInfoPanel();
   };
 
   const clearDestination = () => {
-    setSelectedLocation('');
-    setIsNavigating(false);
-    setShowNavigationPanel(false);
+    onDestinationChange('');
   };
 
   const clearCurrentPosition = () => {
-    setCurrentPosition('');
+    onPositionChange('');
   };
 
-  // Recevoir les messages depuis la carte
-  const handleMapMessage = (message: any) => {
-    switch (message.type) {
-      case 'locationsLoaded':
-        setAvailableLocations(message.locations);
-        setIsLoadingLocations(false);
-        break;
-      case 'navigationStarted':
-        setIsNavigating(true);
-        setTotalDistance(`≈ ${message.distance}m`);
-        break;
-      case 'stepUpdated':
-        setCurrentStepIndex(message.currentStep - 1);
-        break;
-      case 'navigationStopped':
-        setIsNavigating(false);
-        setNavigationSteps([]);
-        setCurrentStepIndex(0);
-        break;
+  const showDestinationsPanel = () => {
+    if (availableLocations.length === 0) {
+      return;
     }
+    
+    setShowDestinations(true);
+    
+    Animated.timing(slideAnim, {
+      toValue: screenHeight * 0.4,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
   };
 
-  const getProgressPercentage = () => {
-    if (navigationSteps.length === 0) return 0;
-    return Math.round((currentStepIndex / (navigationSteps.length - 1)) * 100);
+  const hideDestinations = () => {
+    Animated.timing(slideAnim, {
+      toValue: screenHeight,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => {
+      setShowDestinations(false);
+    });
   };
 
-  const getCurrentStepInstruction = () => {
-    if (navigationSteps.length > 0 && currentStepIndex < navigationSteps.length) {
-      return navigationSteps[currentStepIndex].instruction;
-    }
-    return 'Navigation en cours...';
+  const showLocationInfoPanel = () => {
+    setShowLocationInfo(true);
+    Animated.timing(infoSlideAnim, {
+      toValue: screenHeight * 0.25,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const hideLocationInfoPanel = () => {
+    Animated.timing(infoSlideAnim, {
+      toValue: screenHeight,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => {
+      setShowLocationInfo(false);
+      setSelectedLocationInfo(null);
+    });
   };
 
   const getEmoji = (name: string, type: string) => {
     const lowerName = name.toLowerCase();
-    if (lowerName.includes('restaurant')) return '🍽️';
-    if (lowerName.includes('food') || lowerName.includes('stall')) return '🍕';
+    if (lowerName.includes('food') || lowerName.includes('restaurant')) return '🍔';
     if (lowerName.includes('store') || lowerName.includes('shop')) return '🛍️';
+    if (lowerName.includes('washroom') || lowerName.includes('toilet')) return '🚻';
+    if (lowerName.includes('office')) return 'ℹ️';
     if (lowerName.includes('grocery')) return '🛒';
-    if (lowerName.includes('toilet') || lowerName.includes('washroom')) return '🚻';
-    if (lowerName.includes('elevator')) return '🛗';
-    if (lowerName.includes('exit') || lowerName.includes('entrance')) return '🚪';
-    if (lowerName.includes('info')) return 'ℹ️';
-    if (lowerName.includes('atm')) return '🏧';
-    if (lowerName.includes('security')) return '🛡️';
-    if (lowerName.includes('parking')) return '🅿️';
     return '📍';
+  };
+
+  const getCrowdLevelColor = (level?: string) => {
+    switch (level) {
+      case 'Faible': return '#22c55e';
+      case 'Modéré': return '#f59e0b';
+      case 'Élevé': return '#ef4444';
+      default: return '#6b7280';
+    }
   };
 
   const renderLocationItem = ({ item }: { item: MappedInLocation }) => {
     const emoji = getEmoji(item.name, item.type);
     
     return (
-      <TouchableOpacity
-        style={styles.locationItem}
-        onPress={() => handleDestinationSelect(item)}
-      >
-        <View style={styles.locationEmoji}>
-          <Text style={styles.emojiText}>{emoji}</Text>
-        </View>
-        <View style={styles.locationInfo}>
-          <Text style={styles.locationName}>{item.name}</Text>
-          <Text style={styles.locationDescription}>Type: {item.type}</Text>
-        </View>
-        <Text style={styles.locationArrow}>→</Text>
-      </TouchableOpacity>
+      <View style={styles.destinationCard}>
+        <TouchableOpacity 
+          style={styles.cardContent}
+          onPress={() => handleLocationInfoPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.cardIconContainer}>
+            <Text style={styles.cardIcon}>{emoji}</Text>
+          </View>
+          
+          <View style={styles.cardInfo}>
+            <Text style={styles.cardTitle}>{item.name}</Text>
+            <View style={styles.cardDetails}>
+              {item.level && (
+                <Text style={styles.cardLevel}>{item.level}</Text>
+              )}
+              {item.rating && (
+                <View style={styles.ratingContainer}>
+                  <Text style={styles.ratingStar}>⭐</Text>
+                  <Text style={styles.ratingNumber}>{item.rating.toFixed(1)}</Text>
+                </View>
+              )}
+              {item.walkingTime && (
+                <Text style={styles.cardDistance}>{item.walkingTime}</Text>
+              )}
+            </View>
+          </View>
+          
+          <TouchableOpacity
+            style={styles.goToButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleDestinationSelect(item);
+            }}
+          >
+            <Text style={styles.goToIcon}>✓</Text>
+            <Text style={styles.goToText}>Y aller</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </View>
     );
   };
 
+  const isLoading = mapLocations.length === 0;
+
   return (
-    <View style={styles.container}>
-      {/* Contrôles de navigation */}
-      <View style={styles.navigationControls}>
-        {/* Position actuelle */}
-        {currentPosition && (
-          <View style={styles.positionContainer}>
-            <View style={styles.positionInfo}>
-              <Text style={styles.positionText}>📍 Position: {currentPosition}</Text>
+    <>
+      {/* Contrôles de destination - en haut */}
+      {(mapState.selectedDestination || mapState.currentPosition) && (
+        <View style={styles.topControls}>
+          {mapState.currentPosition && (
+            <View style={styles.positionChip}>
+              <Text style={styles.chipText}>📍 {mapState.currentPosition}</Text>
+              <TouchableOpacity
+                style={styles.chipCloseButton}
+                onPress={clearCurrentPosition}
+              >
+                <Text style={styles.chipCloseText}>×</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.clearPositionButton}
-              onPress={clearCurrentPosition}
-            >
-              <Text style={styles.clearButtonText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Sélection de destination */}
-        <View style={styles.destinationContainer}>
-          <TouchableOpacity
-            style={[
-              styles.destinationButton,
-              { backgroundColor: selectedLocation ? '#4CAF50' : '#007AFF' }
-            ]}
-            onPress={() => setShowLocationPicker(true)}
-          >
-            <Text style={styles.destinationButtonText}>
-              {selectedLocation ? `🎯 ${selectedLocation}` : '🎯 Choisir une destination'}
-            </Text>
-          </TouchableOpacity>
-          {selectedLocation && (
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={clearDestination}
-            >
-              <Text style={styles.clearButtonText}>✕</Text>
-            </TouchableOpacity>
+          )}
+          
+          {mapState.selectedDestination && (
+            <View style={styles.destinationChip}>
+              <Text style={styles.chipText}>🎯 {mapState.selectedDestination}</Text>
+              <TouchableOpacity
+                style={styles.chipCloseButton}
+                onPress={clearDestination}
+              >
+                <Text style={styles.chipCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
+      )}
+
+      {/* Bouton de recherche principal */}
+      <View style={styles.searchButtonContainer}>
+        <TouchableOpacity
+          style={[
+            styles.searchButton,
+            isLoading && styles.searchButtonDisabled
+          ]}
+          onPress={showDestinationsPanel}
+          disabled={isLoading}
+        >
+          <View style={styles.searchIconContainer}>
+            <Text style={styles.searchIcon}>
+              {isLoading ? '⏳' : '🔍'}
+            </Text>
+          </View>
+          <Text style={styles.searchButtonText}>
+            {isLoading 
+              ? 'Chargement des destinations...' 
+              : `Où voulez-vous aller ? (${availableLocations.length})`}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-
-
-      {/* Carte */}
-      <View style={styles.mapContainer}>
-        <MapComponent 
-          onLocationSelect={handleLocationSelect}
-          selectedDestination={selectedLocation}
-          onMapMessage={handleMapMessage}
-        />
-      </View>
-
-
-
-      {/* Modal de sélection de destination */}
-      <Modal
-        visible={showLocationPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>🎯 Destinations Disponibles</Text>
-            <TouchableOpacity
+      {/* Panneau des destinations */}
+      {showDestinations && (
+        <Animated.View style={[
+          styles.destinationsPanel, 
+          { 
+            top: slideAnim,
+            height: screenHeight * 0.6,
+          }
+        ]}>
+          <View style={styles.panelHandle} />
+          
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>
+              Destinations ({availableLocations.length})
+            </Text>
+            <TouchableOpacity 
               style={styles.closeButton}
-              onPress={() => {
-                setShowLocationPicker(false);
-                setSearchQuery('');
-              }}
+              onPress={hideDestinations}
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <Text style={styles.closeButtonText}>×</Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.infoContainer}>
-            <Text style={styles.infoText}>
-              📍 {availableLocations.length} lieux trouvés sur cette carte
-            </Text>
-            {isLoadingLocations && (
-              <Text style={styles.loadingText}>Chargement des lieux...</Text>
-            )}
+          
+          <View style={styles.filterContainer}>
+            <TouchableOpacity style={[styles.filterButton, styles.filterButtonActive]}>
+              <Text style={styles.filterIconActive}>📍</Text>
+              <Text style={styles.filterTextActive}>Tout</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterButton}>
+              <Text style={styles.filterIcon}>🍔</Text>
+              <Text style={styles.filterText}>Restaurants</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterButton}>
+              <Text style={styles.filterIcon}>🚻</Text>
+              <Text style={styles.filterText}>Toilettes</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="🔍 Rechercher un lieu..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
+
           <FlatList
             data={filteredLocations}
             renderItem={renderLocationItem}
             keyExtractor={(item) => item.id}
-            style={styles.locationsList}
+            style={styles.destinationsList}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.destinationsContent}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>
-                  {isLoadingLocations ? '⏳ Chargement...' : '🔍 Aucun lieu trouvé'}
-                </Text>
-                <Text style={styles.emptySubtext}>
-                  {isLoadingLocations 
-                    ? 'Récupération des lieux depuis Mappedin...'
-                    : 'Essayez de modifier votre recherche'
-                  }
+                  {isLoading ? 'Chargement...' : 'Aucune destination trouvée'}
                 </Text>
               </View>
             }
           />
-        </SafeAreaView>
-      </Modal>
-    </View>
+        </Animated.View>
+      )}
+
+      {/* Panneau d'informations détaillées */}
+      {showLocationInfo && selectedLocationInfo && (
+        <Animated.View style={[
+          styles.locationInfoPanel, 
+          { 
+            top: infoSlideAnim,
+            height: screenHeight * 0.75
+          }
+        ]}>
+          <View style={styles.panelHandle} />
+          
+          <View style={styles.infoPanelHeader}>
+            <View style={styles.infoHeaderContent}>
+              <View style={styles.infoIconContainer}>
+                <Text style={styles.infoIcon}>
+                  {getEmoji(selectedLocationInfo.name, selectedLocationInfo.type)}
+                </Text>
+              </View>
+              <View style={styles.infoTitleContainer}>
+                <Text style={styles.infoTitle}>{selectedLocationInfo.name}</Text>
+                <View style={styles.infoSubtitle}>
+                  <Text style={styles.infoLevel}>{selectedLocationInfo.level}</Text>
+                  {selectedLocationInfo.isOpen && (
+                    <View style={styles.openStatusContainer}>
+                      <View style={styles.openDot} />
+                      <Text style={styles.openText}>Ouvert</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={hideLocationInfoPanel}
+            >
+              <Text style={styles.closeButtonText}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.metricsContainer}>
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{selectedLocationInfo.walkingTime}</Text>
+              <Text style={styles.metricLabel}>Temps de marche</Text>
+            </View>
+            <View style={styles.metricDivider} />
+            <View style={styles.metric}>
+              <Text style={styles.metricValue}>{selectedLocationInfo.distance}</Text>
+              <Text style={styles.metricLabel}>Distance</Text>
+            </View>
+            <View style={styles.metricDivider} />
+            <View style={styles.metric}>
+              <Text style={[styles.metricValue, { color: getCrowdLevelColor(selectedLocationInfo.crowdLevel) }]}>
+                {selectedLocationInfo.crowdLevel}
+              </Text>
+              <Text style={styles.metricLabel}>Affluence</Text>
+            </View>
+          </View>
+
+          {selectedLocationInfo.description && (
+            <View style={styles.descriptionContainer}>
+              <Text style={styles.descriptionTitle}>Description</Text>
+              <Text style={styles.descriptionText}>{selectedLocationInfo.description}</Text>
+            </View>
+          )}
+
+          {selectedLocationInfo.services && selectedLocationInfo.services.length > 0 && (
+            <View style={styles.servicesContainer}>
+              <Text style={styles.servicesTitle}>Services disponibles</Text>
+              <View style={styles.servicesGrid}>
+                {selectedLocationInfo.services.map((service, index) => (
+                  <View key={index} style={styles.serviceTag}>
+                    <Text style={styles.serviceText}>{service}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
+              style={styles.navigateButton}
+              onPress={() => {
+                handleDestinationSelect(selectedLocationInfo);
+                hideLocationInfoPanel();
+              }}
+            >
+              <Text style={styles.navigateIcon}>🧭</Text>
+              <Text style={styles.navigateText}>Y aller</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  
-  navigationControls: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-  },
-  
-  positionContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  positionInfo: {
-    backgroundColor: '#e8f5e8',
-    padding: 10,
-    borderRadius: 8,
-    flex: 1,
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
-  },
-  positionText: {
-    fontSize: 14,
-    color: '#2e7d32',
-    fontWeight: '600',
-  },
-  clearPositionButton: {
-    backgroundColor: '#ff4444',
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-  },
-  
-  destinationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  destinationButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    flex: 1,
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  destinationButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  clearButton: {
-    backgroundColor: '#ff4444',
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  clearButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  
-  mapContainer: {
-    flex: 1,
-  },
-  
-  instructionsContainer: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  instructionsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  
-  // Modal styles (identiques à l'original)
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-    backgroundColor: '#f8f9fa',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-  },
-  closeButtonText: {
-    fontSize: 18,
-    color: '#666',
-    fontWeight: 'bold',
-  },
-  infoContainer: {
-    backgroundColor: '#e3f2fd',
-    padding: 12,
-    margin: 16,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
-  },
-  infoText: {
-    fontSize: 14,
-    color: '#1976d2',
-    fontWeight: '600',
-  },
-  loadingText: {
-    fontSize: 12,
-    color: '#1976d2',
-    marginTop: 4,
-  },
-  searchContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  searchInput: {
-    height: 48,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  locationsList: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  locationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  locationEmoji: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  emojiText: {
-    fontSize: 20,
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  locationName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  locationDescription: {
-    fontSize: 13,
-    color: '#666',
-  },
-  locationArrow: {
-    fontSize: 20,
-    color: '#ccc',
-    marginLeft: 16,
+  searchButtonDisabled: {
+    opacity: 0.6,
   },
   
   emptyContainer: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 40,
   },
+  
   emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+
+  topControls: {
+    position: 'absolute',
+    top: 120,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+    flexDirection: 'column',
+    gap: 8,
+  },
+  
+  positionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  
+  destinationChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(66, 133, 244, 0.95)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  
+  chipText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+    marginRight: 8,
+  },
+  
+  chipCloseButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  chipCloseText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  
+  searchButtonContainer: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    zIndex: 1000,
+  },
+  
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 25,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  
+  searchIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  
+  searchIcon: {
+    fontSize: 16,
+  },
+  
+  searchButtonText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  
+  destinationsPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    zIndex: 5000,
+  },
+  
+  locationInfoPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    zIndex: 6000,
+  },
+  
+  panelHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#d1d5db',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  
+  panelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  
+  panelTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  closeButtonText: {
     fontSize: 18,
     color: '#666',
+    fontWeight: '500',
+  },
+  
+  filterContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  
+  filterButtonActive: {
+    backgroundColor: '#4a5568',
+  },
+  
+  filterIcon: {
+    fontSize: 14,
+    color: '#666',
+  },
+  
+  filterIconActive: {
+    fontSize: 14,
+    color: '#ffffff',
+  },
+  
+  filterText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  
+  filterTextActive: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  
+  destinationsList: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  
+  destinationsContent: {
+    paddingVertical: 8,
+    paddingBottom: 20,
+  },
+  
+  destinationCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    marginVertical: 4,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
+  cardIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  
+  cardIcon: {
+    fontSize: 24,
+  },
+  
+  cardInfo: {
+    flex: 1,
+  },
+  
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 6,
+  },
+  
+  cardDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  
+  cardLevel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  
+  cardDistance: {
+    fontSize: 14,
+    color: '#666',
+  },
+  
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  
+  ratingStar: {
+    fontSize: 14,
+    color: '#fbbf24',
+  },
+  
+  ratingNumber: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4285F4',
+  },
+  
+  goToButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4285F4',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    gap: 6,
+    elevation: 2,
+    shadowColor: '#4285F4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  
+  goToIcon: {
+    fontSize: 14,
+    color: '#ffffff',
+  },
+  
+  goToText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  
+  separator: {
+    height: 8,
+  },
+  
+  infoPanelHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  
+  infoHeaderContent: {
+    flexDirection: 'row',
+    flex: 1,
+  },
+  
+  infoIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#f8f9fa',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  
+  infoIcon: {
+    fontSize: 28,
+  },
+  
+  infoTitleContainer: {
+    flex: 1,
+  },
+  
+  infoTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 6,
+  },
+  
+  infoSubtitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  
+  infoLevel: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '500',
+  },
+  
+  openStatusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  
+  openDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+  },
+  
+  openText: {
+    fontSize: 14,
+    color: '#22c55e',
+    fontWeight: '600',
+  },
+  
+  metricsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 20,
+    marginBottom: 24,
+  },
+  
+  metric: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  
+  metricLabel: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  
+  metricDivider: {
+    width: 1,
+    backgroundColor: '#e5e7eb',
+    marginHorizontal: 16,
+  },
+  
+  descriptionContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  
+  descriptionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1a1a1a',
     marginBottom: 8,
   },
-  emptySubtext: {
+  
+  descriptionText: {
+    fontSize: 16,
+    color: '#666',
+    lineHeight: 24,
+  },
+  
+  servicesContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+  },
+  
+  servicesTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 12,
+  },
+  
+  servicesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  
+  serviceTag: {
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#4285F4',
+  },
+  
+  serviceText: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    paddingHorizontal: 40,
+    color: '#4285F4',
+    fontWeight: '500',
+  },
+  
+  actionsContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
+  
+  navigateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4285F4',
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
+    elevation: 2,
+    shadowColor: '#4285F4',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  
+  navigateIcon: {
+    fontSize: 20,
+    color: '#ffffff',
+  },
+  
+  navigateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });
