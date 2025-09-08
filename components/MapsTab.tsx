@@ -1,5 +1,5 @@
-// components/MapsTab.tsx - Interface pour carte persistante - VERSION FINALE
-import React, { useState, useRef, useEffect } from 'react';
+// components/MapsTab.tsx - Interface pour carte persistante - VERSION CORRIGÉE
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -58,28 +58,8 @@ export default function MapsTab({
   const [searchQuery, setSearchQuery] = useState('');
   const [availableLocations, setAvailableLocations] = useState<MappedInLocation[]>([]);
 
-  useEffect(() => {
-    if (mapLocations && mapLocations.length > 0) {
-      const mappedLocations: MappedInLocation[] = mapLocations.map((loc: any) => ({
-        id: loc.id,
-        name: loc.name,
-        type: getLocationTypeFromName(loc.name),
-        description: generateDescription(loc.name, loc.type),
-        level: 'Niveau 0',
-        rating: 4.0 + Math.random() * 1.0,
-        distance: `${50 + Math.floor(Math.random() * 200)}m`,
-        walkingTime: `${1 + Math.floor(Math.random() * 5)} min`,
-        services: generateServices(loc.name),
-        isOpen: Math.random() > 0.2,
-        openingHours: generateOpeningHours(loc.name),
-        crowdLevel: ['Faible', 'Modéré', 'Élevé'][Math.floor(Math.random() * 3)] as 'Faible' | 'Modéré' | 'Élevé'
-      }));
-      
-      setAvailableLocations(mappedLocations);
-    }
-  }, [mapLocations]);
-
-  const getLocationTypeFromName = (name: string): string => {
+  // Fonctions utilitaires memoized pour éviter les recalculs
+  const getLocationTypeFromName = useCallback((name: string): string => {
     const lowerName = name.toLowerCase();
     if (lowerName.includes('food') || lowerName.includes('restaurant')) return 'Restaurant';
     if (lowerName.includes('store') || lowerName.includes('shop')) return 'Shop';
@@ -87,9 +67,9 @@ export default function MapsTab({
     if (lowerName.includes('office')) return 'Services';
     if (lowerName.includes('grocery')) return 'Grocery';
     return 'Other';
-  };
+  }, []);
 
-  const generateDescription = (name: string, type: string): string => {
+  const generateDescription = useCallback((name: string, type: string): string => {
     const lowerName = name.toLowerCase();
     if (lowerName.includes('food') || lowerName.includes('restaurant')) {
       return 'Restaurant avec une variété de plats délicieux. Service rapide et ambiance conviviale.';
@@ -104,9 +84,9 @@ export default function MapsTab({
       return 'Épicerie avec produits frais et articles de première nécessité. Ouvert tous les jours.';
     }
     return `${name} - Un lieu pratique et accessible pour vos besoins.`;
-  };
+  }, []);
 
-  const generateServices = (name: string): string[] => {
+  const generateServices = useCallback((name: string): string[] => {
     const lowerName = name.toLowerCase();
     if (lowerName.includes('food') || lowerName.includes('restaurant')) {
       return ['Plats chauds', 'Boissons', 'Service rapide', 'Paiement carte'];
@@ -121,41 +101,73 @@ export default function MapsTab({
       return ['Produits frais', 'Épicerie fine', 'Paiement sans contact', 'Sacs réutilisables'];
     }
     return ['Service client', 'Accès facile'];
-  };
+  }, []);
 
-  const generateOpeningHours = (name: string): string => {
+  const generateOpeningHours = useCallback((name: string): string => {
     const lowerName = name.toLowerCase();
     if (lowerName.includes('washroom')) return '24h/24';
     if (lowerName.includes('office')) return '09h00 - 17h00';
     return '10h00 - 22h00';
-  };
+  }, []);
 
-  const filteredLocations = availableLocations.filter(location =>
-    location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (location.description && location.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  // Effect pour traiter les locations - OPTIMISÉ pour éviter useInsertionEffect
+  useEffect(() => {
+    if (mapLocations && mapLocations.length > 0) {
+      // Utiliser setTimeout pour déférer la mise à jour et éviter useInsertionEffect
+      const timeoutId = setTimeout(() => {
+        const mappedLocations: MappedInLocation[] = mapLocations.map((loc: any) => ({
+          id: loc.id,
+          name: loc.name,
+          type: getLocationTypeFromName(loc.name),
+          description: generateDescription(loc.name, loc.type),
+          level: 'Niveau 0',
+          rating: 4.0 + Math.random() * 1.0,
+          distance: `${50 + Math.floor(Math.random() * 200)}m`,
+          walkingTime: `${1 + Math.floor(Math.random() * 5)} min`,
+          services: generateServices(loc.name),
+          isOpen: Math.random() > 0.2,
+          openingHours: generateOpeningHours(loc.name),
+          crowdLevel: ['Faible', 'Modéré', 'Élevé'][Math.floor(Math.random() * 3)] as 'Faible' | 'Modéré' | 'Élevé'
+        }));
+        
+        setAvailableLocations(mappedLocations);
+      }, 0);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [mapLocations, getLocationTypeFromName, generateDescription, generateServices, generateOpeningHours]);
+
+  // Memoized filtered locations pour éviter les recalculs
+  const filteredLocations = useMemo(() => 
+    availableLocations.filter(location =>
+      location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (location.description && location.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    ), [availableLocations, searchQuery]
   );
 
-  const handleDestinationSelect = (location: MappedInLocation) => {
+  // Handlers stables avec useCallback
+  const handleDestinationSelect = useCallback((location: MappedInLocation) => {
     onDestinationChange(location.name);
     setShowDestinations(false);
     setSearchQuery('');
     hideDestinations();
-  };
+  }, [onDestinationChange]);
 
-  const handleLocationInfoPress = (location: MappedInLocation) => {
+  const handleLocationInfoPress = useCallback((location: MappedInLocation) => {
     setSelectedLocationInfo(location);
     showLocationInfoPanel();
-  };
+  }, []);
 
-  const clearDestination = () => {
+  const clearDestination = useCallback(() => {
     onDestinationChange('');
-  };
+  }, [onDestinationChange]);
 
-  const clearCurrentPosition = () => {
+  const clearCurrentPosition = useCallback(() => {
     onPositionChange('');
-  };
+  }, [onPositionChange]);
 
-  const showDestinationsPanel = () => {
+  // Fonctions d'animation stables
+  const showDestinationsPanel = useCallback(() => {
     if (availableLocations.length === 0) {
       return;
     }
@@ -167,9 +179,9 @@ export default function MapsTab({
       duration: 300,
       useNativeDriver: false,
     }).start();
-  };
+  }, [availableLocations.length, slideAnim, screenHeight]);
 
-  const hideDestinations = () => {
+  const hideDestinations = useCallback(() => {
     Animated.timing(slideAnim, {
       toValue: screenHeight,
       duration: 300,
@@ -177,18 +189,18 @@ export default function MapsTab({
     }).start(() => {
       setShowDestinations(false);
     });
-  };
+  }, [slideAnim, screenHeight]);
 
-  const showLocationInfoPanel = () => {
+  const showLocationInfoPanel = useCallback(() => {
     setShowLocationInfo(true);
     Animated.timing(infoSlideAnim, {
       toValue: screenHeight * 0.25,
       duration: 300,
       useNativeDriver: false,
     }).start();
-  };
+  }, [infoSlideAnim, screenHeight]);
 
-  const hideLocationInfoPanel = () => {
+  const hideLocationInfoPanel = useCallback(() => {
     Animated.timing(infoSlideAnim, {
       toValue: screenHeight,
       duration: 300,
@@ -197,9 +209,10 @@ export default function MapsTab({
       setShowLocationInfo(false);
       setSelectedLocationInfo(null);
     });
-  };
+  }, [infoSlideAnim, screenHeight]);
 
-  const getEmoji = (name: string, type: string) => {
+  // Fonctions utilitaires memoized
+  const getEmoji = useCallback((name: string, type: string) => {
     const lowerName = name.toLowerCase();
     if (lowerName.includes('food') || lowerName.includes('restaurant')) return '🍔';
     if (lowerName.includes('store') || lowerName.includes('shop')) return '🛍️';
@@ -207,18 +220,19 @@ export default function MapsTab({
     if (lowerName.includes('office')) return 'ℹ️';
     if (lowerName.includes('grocery')) return '🛒';
     return '📍';
-  };
+  }, []);
 
-  const getCrowdLevelColor = (level?: string) => {
+  const getCrowdLevelColor = useCallback((level?: string) => {
     switch (level) {
       case 'Faible': return '#22c55e';
       case 'Modéré': return '#f59e0b';
       case 'Élevé': return '#ef4444';
       default: return '#6b7280';
     }
-  };
+  }, []);
 
-  const renderLocationItem = ({ item }: { item: MappedInLocation }) => {
+  // Composant de rendu memoized pour la performance
+  const renderLocationItem = useCallback(({ item }: { item: MappedInLocation }) => {
     const emoji = getEmoji(item.name, item.type);
     
     return (
@@ -263,7 +277,7 @@ export default function MapsTab({
         </TouchableOpacity>
       </View>
     );
-  };
+  }, [getEmoji, handleLocationInfoPress, handleDestinationSelect]);
 
   const isLoading = mapLocations.length === 0;
 

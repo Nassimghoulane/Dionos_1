@@ -1,5 +1,5 @@
 // App.tsx - Navigation avec carte persistante optimisée CORRIGÉE
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -41,79 +41,87 @@ function AppContent() {
   const [currentPosition, setCurrentPosition] = useState<string>('');
   const mapRef = useRef<any>(null);
 
-  // ✅ AJOUT : État pour stocker les locations de la carte
+  // État pour stocker les locations de la carte - STABLE
   const [mapLocations, setMapLocations] = useState<any[]>([]);
 
-  // Gérer la sélection d'un magasin Click & Collect
-  const handleStoreSelect = (store: any) => {
+  // Gérer la sélection d'un magasin Click & Collect - STABLE
+  const handleStoreSelect = useCallback((store: any) => {
     actions.setSelectedStore(store);
-  };
+  }, [actions]);
 
-  // Naviguer vers un magasin depuis Click & Collect vers l'onglet Maps
-  const handleNavigateToStore = (storeId?: string) => {
+  // Naviguer vers un magasin depuis Click & Collect vers l'onglet Maps - STABLE
+  const handleNavigateToStore = useCallback((storeId?: string) => {
     const store = storeId ? actions.getStoreById(storeId) : state.selectedStore;
     if (store) {
       // Définir la destination sur la carte
       setSelectedDestination(store.name);
       setActiveTab('maps');
     }
-  };
+  }, [actions, state.selectedStore]);
 
-  // Checkout Click & Collect
-  const handlePlaceOrder = (orderData: any) => {
+  // Checkout Click & Collect - STABLE
+  const handlePlaceOrder = useCallback((orderData: any) => {
     actions.placeOrder(orderData);
-  };
+  }, [actions]);
 
-  // Navigation vers les commandes depuis l'onglet compte
-  const handleNavigateToOrders = () => {
+  // Navigation vers les commandes depuis l'onglet compte - STABLE
+  const handleNavigateToOrders = useCallback(() => {
     setShowOrdersModal(true);
-  };
+  }, []);
 
-  // Navigation vers les favoris (à implémenter)
-  const handleNavigateToFavorites = () => {
+  // Navigation vers les favoris (à implémenter) - STABLE
+  const handleNavigateToFavorites = useCallback(() => {
     console.log('Navigation vers favoris - à implémenter');
-  };
+  }, []);
 
-  // Fonctions partagées pour la carte
-  const handleLocationSelect = (locationName: string) => {
+  // Fonctions partagées pour la carte - STABLE
+  const handleLocationSelect = useCallback((locationName: string) => {
     setCurrentPosition(locationName);
-  };
+  }, []);
 
-  // ✅ MODIFICATION : Capturer les données de locations
-  const handleMapMessage = (message: any) => {
+  // Capturer les données de locations - STABLE et OPTIMISÉ
+  const handleMapMessage = useCallback((message: any) => {
     console.log('Map message dans App:', message.type);
     
     // Capturer les données de locations quand elles arrivent
     if (message.type === 'locationsLoaded' && message.locations) {
       console.log('📍 Stockage des locations dans App:', message.locations.length);
-      setMapLocations(message.locations);
+      // Utiliser une fonction callback pour éviter les re-rendus inutiles
+      setMapLocations(prevLocations => {
+        // Éviter de mettre à jour si les données sont identiques
+        if (prevLocations.length === message.locations.length) {
+          return prevLocations;
+        }
+        return message.locations;
+      });
     }
-  };
+  }, []);
 
-  // Props partagés pour la carte
-  const mapProps: MapState = {
+  // Props partagés pour la carte - MEMOIZED pour éviter les re-rendus
+  const mapProps: MapState = useMemo(() => ({
     selectedDestination,
     currentPosition,
     onLocationSelect: handleLocationSelect,
     onMapMessage: handleMapMessage,
-  };
+  }), [selectedDestination, currentPosition, handleLocationSelect, handleMapMessage]);
 
-  const getOrderStats = () => {
+  // Calcul des stats de commandes - MEMOIZED
+  const orderStats = useMemo(() => {
     const activeOrders = state.activeOrders.filter(order => 
       !['collected', 'cancelled'].includes(order.status)
     );
     return { total: activeOrders.length };
-  };
+  }, [state.activeOrders]);
 
-  const orderStats = getOrderStats();
-
-  const renderTabButton = (tabType: TabType, label: string, icon: string) => {
+  // Fonction de rendu des boutons d'onglet - STABLE
+  const renderTabButton = useCallback((tabType: TabType, label: string, icon: string) => {
     const cartItemCount = actions.getCartItemCount();
     const showCartBadge = tabType === 'shopping' && cartItemCount > 0;
     const showOrderBadge = tabType === 'account' && orderStats.total > 0;
 
     return (
       <TouchableOpacity
+        key={tabType}
         style={[
           styles.tabButton,
           activeTab === tabType && styles.activeTabButton
@@ -149,10 +157,12 @@ function AppContent() {
         )}
       </TouchableOpacity>
     );
-  };
+  }, [activeTab, actions, orderStats.total]);
 
-  const renderQuickAction = (label: string, icon: string, onPress?: () => void) => (
+  // Fonction de rendu des actions rapides - STABLE
+  const renderQuickAction = useCallback((label: string, icon: string, onPress?: () => void) => (
     <TouchableOpacity
+      key={label}
       style={styles.quickActionButton}
       onPress={onPress}
     >
@@ -161,7 +171,7 @@ function AppContent() {
       </View>
       <Text style={styles.quickActionLabel}>{label}</Text>
     </TouchableOpacity>
-  );
+  ), []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -209,7 +219,7 @@ function AppContent() {
             mapState={mapProps}
             onDestinationChange={setSelectedDestination}
             onPositionChange={setCurrentPosition}
-            mapLocations={mapLocations} // ✅ AJOUT : Passer les données de locations
+            mapLocations={mapLocations}
           />
           
           {/* Actions rapides en bas de la carte */}

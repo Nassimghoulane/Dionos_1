@@ -1,4 +1,4 @@
-// components/MapComponent.tsx - Blue Dot Navigation avec flèches plus petites
+// components/MapComponent.tsx - Blue Dot Navigation sans marqueur de destination
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -68,7 +68,7 @@ export default function MapComponent({ onLocationSelect, selectedDestination, on
             
             .walk-button {
                 position: absolute;
-                bottom: 40px;
+                bottom: 200px;
                 left: 50%;
                 transform: translateX(-50%);
                 background: linear-gradient(135deg, #4CAF50, #45a049);
@@ -88,31 +88,6 @@ export default function MapComponent({ onLocationSelect, selectedDestination, on
             .walk-button.walking {
                 background: linear-gradient(135deg, #f44336, #d32f2f);
                 box-shadow: 0 8px 25px rgba(244, 67, 54, 0.5);
-            }
-            
-            .destination-marker {
-                background: linear-gradient(135deg, #FF5722, #E64A19);
-                color: white;
-                padding: 12px 18px;
-                border-radius: 30px;
-                box-shadow: 0 8px 20px rgba(255, 87, 34, 0.6);
-                font-weight: bold;
-                text-align: center;
-                font-size: 16px;
-                border: 3px solid white;
-                animation: destinationPulse 1.5s infinite;
-                position: relative;
-                z-index: 50;
-                white-space: nowrap;
-            }
-            
-            @keyframes destinationPulse {
-                0%, 100% { 
-                    transform: scale(1); 
-                }
-                50% { 
-                    transform: scale(1.1); 
-                }
             }
         </style>
     </head>
@@ -335,11 +310,12 @@ export default function MapComponent({ onLocationSelect, selectedDestination, on
                 destinationLocation = destination.mappedinObject;
                 console.log('Destination définie:', destination.name);
                 
-                mapView.Markers.add(destination.mappedinObject, \`
-                    <div class="destination-marker">🎯 \${destination.name}</div>
-                \`, {
-                    rank: 500
-                });
+                // SUPPRIMÉ : Le marqueur de destination avec le nom
+                // mapView.Markers.add(destination.mappedinObject, \`
+                //     <div class="destination-marker">🎯 \${destination.name}</div>
+                // \`, {
+                //     rank: 500
+                // });
                 
                 setTimeout(() => {
                     startNavigation();
