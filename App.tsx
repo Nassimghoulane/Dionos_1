@@ -1,19 +1,22 @@
-// App.tsx - Navigation avec carte persistante optimisée CORRIGÉE
+// App.tsx - Version complète avec EventTour, ToiletFinder et MyTicket
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  StatusBar,
   TouchableOpacity,
   SafeAreaView,
   Dimensions,
+  StatusBar,
 } from 'react-native';
 import MapComponent from './components/MapComponent';
 import ClickCollectStore from './components/ClickCollectStore';
 import ClickCollectCart from './components/ClickCollectCart';
 import ClickCollectCheckout from './components/ClickCollectCheckout';
 import ClickCollectOrders from './components/ClickCollectOrders';
+import MyTicket from './components/MyTicket';
+import ToiletFinder from './components/ToiletFinder';
+import EventTour from './components/EventTour';
 import { ClickCollectProvider, useClickCollect } from './context/ClickCollectContext';
 import ClickCollectTab from './components/ClickCollectTab';
 import MapsTab from './components/MapsTab';
@@ -31,10 +34,74 @@ interface MapState {
   onMapMessage: (message: any) => void;
 }
 
+// Interface pour les billets
+interface TicketInfo {
+  id: string;
+  eventName: string;
+  venue: string;
+  date: string;
+  time: string;
+  section: string;
+  row: string;
+  seat: string;
+  gate?: string;
+  price?: string;
+  barcode?: string;
+  qrCode?: string;
+  createdAt: string;
+}
+
+// Interface pour les toilettes
+interface ToiletLocation {
+  id: string;
+  name: string;
+  type: 'men' | 'women' | 'unisex' | 'accessible';
+  level: string;
+  distance?: string;
+  walkingTime?: string;
+  isClean?: boolean;
+  hasAccessibility?: boolean;
+  hasChangingTable?: boolean;
+  crowdLevel?: 'Faible' | 'Modéré' | 'Élevé';
+  description?: string;
+  location: {
+    x: number;
+    y: number;
+  };
+}
+
+// Interface pour les événements
+interface EventInfo {
+  id: string;
+  title: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+  duration: string;
+  location: string;
+  distance: string;
+  walkingTime: string;
+  category: 'concert' | 'sport' | 'exhibition' | 'conference' | 'food' | 'entertainment';
+  priority: 'high' | 'medium' | 'low';
+  capacity?: number;
+  currentAttendance?: number;
+  price?: string;
+  ageRestriction?: string;
+  highlights: string[];
+  tags: string[];
+  isLive?: boolean;
+  isUpcoming?: boolean;
+  isSoldOut?: boolean;
+}
+
 function AppContent() {
   const { state, actions } = useClickCollect();
   const [activeTab, setActiveTab] = useState<TabType>('maps');
   const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [showMyTicketModal, setShowMyTicketModal] = useState(false);
+  const [showToiletModal, setShowToiletModal] = useState(false);
+  const [showEventTourModal, setShowEventTourModal] = useState(false);
+  const [savedTickets, setSavedTickets] = useState<TicketInfo[]>([]);
   
   // États partagés pour la carte
   const [selectedDestination, setSelectedDestination] = useState<string>('');
@@ -43,6 +110,43 @@ function AppContent() {
 
   // État pour stocker les locations de la carte - STABLE
   const [mapLocations, setMapLocations] = useState<any[]>([]);
+
+  // Fonctions de gestion des billets
+  const handleTicketSaved = useCallback((ticket: TicketInfo) => {
+    setSavedTickets(prev => [...prev, ticket]);
+    console.log('Billet sauvegardé:', ticket.eventName);
+  }, []);
+
+  const handleDeleteTicket = useCallback((ticketId: string) => {
+    setSavedTickets(prev => prev.filter(ticket => ticket.id !== ticketId));
+    console.log('Billet supprimé:', ticketId);
+  }, []);
+
+  const handleMyPlacePress = useCallback(() => {
+    setShowMyTicketModal(true);
+  }, []);
+
+  // Fonctions de gestion des toilettes
+  const handleToiletPress = useCallback(() => {
+    setShowToiletModal(true);
+  }, []);
+
+  const handleNavigateToToilet = useCallback((toilet: ToiletLocation) => {
+    setSelectedDestination(toilet.name);
+    setActiveTab('maps');
+    console.log('Navigation vers toilette:', toilet.name);
+  }, []);
+
+  // Fonctions de gestion du tour des événements
+  const handleEventTourPress = useCallback(() => {
+    setShowEventTourModal(true);
+  }, []);
+
+  const handleNavigateToEvent = useCallback((event: EventInfo) => {
+    setSelectedDestination(event.location);
+    setActiveTab('maps');
+    console.log('Navigation vers événement:', event.title);
+  }, []);
 
   // Gérer la sélection d'un magasin Click & Collect - STABLE
   const handleStoreSelect = useCallback((store: any) => {
@@ -53,7 +157,6 @@ function AppContent() {
   const handleNavigateToStore = useCallback((storeId?: string) => {
     const store = storeId ? actions.getStoreById(storeId) : state.selectedStore;
     if (store) {
-      // Définir la destination sur la carte
       setSelectedDestination(store.name);
       setActiveTab('maps');
     }
@@ -83,7 +186,6 @@ function AppContent() {
   const handleMapMessage = useCallback((message: any) => {
     console.log('Map message dans App:', message.type);
     
-    // Capturer les données de locations quand elles arrivent
     if (message.type === 'locationsLoaded' && message.locations) {
       console.log('📍 Stockage des locations dans App:', message.locations.length);
       // Utiliser une fonction callback pour éviter les re-rendus inutiles
@@ -224,9 +326,9 @@ function AppContent() {
           
           {/* Actions rapides en bas de la carte */}
           <View style={styles.quickActionsContainer}>
-            {renderQuickAction('Tour', '🎯')}
-            {renderQuickAction('Ma place', '📍')}
-            {renderQuickAction('Toilet', '🚻')}
+            {renderQuickAction('Tour', '🎯', handleEventTourPress)}
+            {renderQuickAction('Ma place', '📍', handleMyPlacePress)}
+            {renderQuickAction('Toilet', '🚻', handleToiletPress)}
           </View>
         </>
       )}
@@ -266,6 +368,30 @@ function AppContent() {
         onClose={() => setShowOrdersModal(false)}
         onNavigateToStore={handleNavigateToStore}
         onCancelOrder={actions.cancelOrder}
+      />
+
+      {/* Composant Ma Place */}
+      <MyTicket
+        isVisible={showMyTicketModal}
+        onClose={() => setShowMyTicketModal(false)}
+        onTicketSaved={handleTicketSaved}
+        savedTickets={savedTickets}
+      />
+
+      {/* Composant ToiletFinder */}
+      <ToiletFinder
+        isVisible={showToiletModal}
+        onClose={() => setShowToiletModal(false)}
+        onNavigateToToilet={handleNavigateToToilet}
+        mapLocations={mapLocations}
+      />
+
+      {/* Composant EventTour */}
+      <EventTour
+        isVisible={showEventTourModal}
+        onClose={() => setShowEventTourModal(false)}
+        onNavigateToEvent={handleNavigateToEvent}
+        mapLocations={mapLocations}
       />
     </SafeAreaView>
   );
